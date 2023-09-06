@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pg-secret
+  namespace: app-database-center
+type: Opaque
+data:
+  password: YWRtaW4K
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: pg-config-map
+  namespace: app-database-center
+data:
+  POSTGRES_DB: postgres
+  POSTGRES_USER: postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pg-depl
+  namespace: app-database-center
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: pg-pvc
+      containers:
+        - name: postgres
+          image: postgres:15.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pg-secret
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: pg-config-map
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: pg-config-map
+                  key: POSTGRES_USER
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: "500m"
+            limits:
+              memory: 2Gi
+              cpu: "1"
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+              name: postgres-port
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-svc
+  namespace: app-database-center
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: postgres-port
+      protocol: TCP
+      name: postgres-svc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pg-pvc
+  namespace: app-database-center
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
